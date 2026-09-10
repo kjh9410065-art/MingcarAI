@@ -13,19 +13,38 @@ export default {
           return json({ error: '프롬프트가 없습니다.' }, 400);
         }
 
-        // 2026년 현재 사용 가능한 Cloudflare Workers AI 모델로 생성합니다.
-        // 기존 llama-3.1-8b-instruct는 2026-05-30에 폐기되어 3.2 3B로 교체했습니다.
-        const result = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
+        // 블로그 글처럼 긴 한국어 결과를 안정적으로 만들기 위해 70B 모델을 사용합니다.
+        // JSON Mode를 함께 사용해 제목·본문·해시태그 형식을 안정적으로 맞춥니다.
+        const result = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
           messages: [
-            // 밍카·HUB·계산기 세 사이트 모두 사용할 수 있도록 범용 블로그 작성 역할로 설정합니다.
-            { role: 'system', content: '너는 한국어 정보 블로그 작성 도우미다. 확인되지 않은 사실, 가격, 통계, 순위 등을 임의로 만들지 않는다. 사용자가 요청한 사이트와 주제에 맞는 자연스러운 글을 작성한다.' },
+            // 세 사이트 모두 사용할 수 있는 한국어 정보 블로그 작성 역할입니다.
+            {
+              role: 'system',
+              content: '너는 한국어 네이버 블로그 전문 작성자다. 반드시 자연스러운 한국어만 사용한다. 영어, 힌디어, 일본어 등 다른 언어 단어를 불필요하게 섞지 않는다. 확인되지 않은 사실, 가격, 통계, 순위 등을 임의로 만들지 않는다. 사용자가 요청한 사이트와 주제에 맞는 읽기 쉬운 정보글을 작성한다.'
+            },
             { role: 'user', content: prompt }
           ],
           max_tokens: 3500,
-          temperature: 0.7
+          temperature: 0.35,
+          top_p: 0.9,
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                body: { type: 'string' },
+                tags: { type: 'string' }
+              },
+              required: ['title', 'body', 'tags']
+            }
+          }
         });
 
-        return json({ text: result?.response || '' });
+        // 모델 응답은 일반 문자열일 수도 있고 JSON 객체일 수도 있으므로 브라우저가 항상 문자열을 받게 합니다.
+        const response = result?.response;
+        const text = typeof response === 'string' ? response : JSON.stringify(response || {});
+        return json({ text });
       } catch (error) {
         return json({ error: error?.message || 'AI 생성에 실패했습니다.' }, 500);
       }
