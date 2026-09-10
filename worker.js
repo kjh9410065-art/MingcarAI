@@ -52,12 +52,11 @@ export default {
         const prompt = String(body.prompt || '').trim();
         if (!prompt) return json({ error: '이미지 설명이 없습니다.' }, 400);
 
-        // FLUX.1 schnell의 공식 파라미터는 num_steps가 아니라 steps입니다.
-        // 4단계로 생성해 속도와 사용량을 우선합니다.
+        // FLUX.1 schnell은 steps만 사용하고 seed는 전달하지 않아 모델 기본값을 사용합니다.
+        // 지원하지 않는 파라미터를 제거해 5006 스키마 오류를 방지합니다.
         const result = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
           prompt: prompt.slice(0, 2048),
-          steps: 4,
-          seed: Math.floor(Math.random() * 2147483647)
+          steps: 4
         });
 
         if (!result?.image) throw new Error('이미지 응답이 비어 있습니다.');
