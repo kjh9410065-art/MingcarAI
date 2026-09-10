@@ -75,7 +75,7 @@ export default {
       const html = await response.text();
       const injected = html.includes('enhance.js')
         ? html
-        : html.replace('</body>', '<script src="/enhance.js?v=2"></script></body>');
+        : html.replace('</body>', '<script src="/enhance.js?v=3"></script></body>');
       return new Response(injected, {
         status: response.status,
         headers: new Headers(response.headers)
