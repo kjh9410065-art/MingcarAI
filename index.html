@@ -3,15 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>밍카 AI 블로그 작성기</title>
+<title>FLiCK AI 블로그 작성기</title>
 <style>
-body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;background:#f7f6fb;color:#222}main{background:#fff;padding:24px;border-radius:18px;box-shadow:0 8px 30px #0000000a}h1{margin-top:0}label{display:block;font-weight:700;margin:16px 0 7px}input,select,textarea,button{box-sizing:border-box;width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;font:inherit}textarea{min-height:360px;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.btn{margin-top:12px;cursor:pointer;font-weight:800}.primary{background:#7567e8;color:#fff;border:0}.muted{font-size:12px;color:#777}.status{margin-top:12px;padding:10px;border-radius:10px;background:#faf9ff}.result{margin-top:20px}@media(max-width:700px){.row{grid-template-columns:1fr}body{padding:12px}main{padding:18px}}
+body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;background:#f7f6fb;color:#222}main{background:#fff;padding:24px;border-radius:18px;box-shadow:0 8px 30px #0000000a}h1{margin-top:0}label{display:block;font-weight:700;margin:16px 0 7px}input,select,textarea,button{box-sizing:border-box;width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;font:inherit}textarea{min-height:360px;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.btn{margin-top:12px;cursor:pointer;font-weight:800}.primary{background:#7567e8;color:#fff;border:0}.muted{font-size:12px;color:#777}.status{margin-top:12px;padding:10px;border-radius:10px;background:#faf9ff}.result{margin-top:20px}
+/* 사이트별 글 생산기를 탭으로 전환합니다. */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:18px 0 20px}.tab{border:1px solid #ddd;background:#fafafa;color:#555;font-weight:800;cursor:pointer;padding:13px 8px}.tab.active{background:#7567e8;color:#fff;border-color:#7567e8}.site-info{padding:14px 16px;border-radius:12px;background:#f8f6ff;border:1px solid #ebe6ff;margin-bottom:14px}.site-info strong{display:block;margin-bottom:4px}.site-info a{color:#7567e8;font-size:12px;word-break:break-all}
+@media(max-width:700px){.row{grid-template-columns:1fr}body{padding:12px}main{padding:18px}.tabs{gap:6px}.tab{font-size:13px;padding:12px 4px}}
 </style>
 </head>
 <body>
 <main>
-<h1>🚗 밍카 AI 블로그 작성기</h1>
-<p class="muted">API 키 없이 Cloudflare AI로 자동차 블로그 글을 생성합니다. 매번 새로운 주제와 인사말·본문·이미지 위치·끝인사를 함께 만듭니다.</p>
+<h1>✍️ FLiCK AI 블로그 작성기</h1>
+<p class="muted">사이트 탭을 선택하면 해당 사이트에 맞는 주제와 글을 자동으로 생성합니다.</p>
+
+<!-- 밍카 / HUB / 계산기 중 글을 만들 사이트를 선택합니다. -->
+<div class="tabs">
+<button class="tab active" data-site="mingka">🚗 밍카</button>
+<button class="tab" data-site="hub">🔌 HUB</button>
+<button class="tab" data-site="calc">🧮 계산기</button>
+</div>
+
+<div id="siteInfo" class="site-info"></div>
 
 <div class="row">
 <div><label>AI 모델</label><select id="model"><option value="cloudflare">Cloudflare Workers AI</option></select></div>
@@ -34,20 +46,42 @@ body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;bac
 </main>
 
 <script>
-/* 밍카 AI 웹 작성기: 모든 AI 요청은 같은 사이트의 /api/generate로 보냅니다. */
-const MINGKA_URL='https://carpick-korea.carpick.workers.dev/';
-const usedKey='mingcarai_used_topics_v2';
+/* FLiCK AI 웹 작성기: 모든 AI 요청은 같은 사이트의 /api/generate로 보냅니다. */
+const SITES={
+  // 밍카는 자동차 장기렌트·리스 관련 글을 생산합니다.
+  mingka:{name:'밍카',emoji:'🚗',url:'https://carpick-korea.carpick.workers.dev/',description:'자동차 장기렌트·리스와 차량 이용 방법을 비교하고 추천하는 사이트',topics:['자동차 장기렌트','자동차 리스','신차 구매','중고차 구매','자동차 보험','차량 유지비','장기렌터카 계약','리스 계약','자동차 보증금','리스 선납금','장기렌터카 주행거리','자동차 계약기간','계약 종료 후 차량','첫 차 선택','출퇴근용 자동차','가족용 자동차','전기차','하이브리드 자동차','SUV 선택','세단 선택','경차 선택','자동차 세금','자동차 보험료','차량 감가상각','월 납입금 비교','렌트와 리스 비교']},
+  // HUB는 AI 서비스와 API를 비교·중개하는 사이트입니다.
+  hub:{name:'HUB',emoji:'🔌',url:'https://hub.carpick.workers.dev/',description:'AI 서비스와 API를 한곳에서 찾아보고 비교할 수 있는 FLiCK 허브',topics:['AI 이미지 생성 서비스','AI 영상 생성 서비스','AI 음성 생성 서비스','AI 챗봇 서비스','AI 쇼츠 제작 도구','AI API 선택 방법','이미지 생성 API','영상 생성 API','음성 생성 API','챗봇 API','무료 AI 도구','AI 서비스 비교','AI API 활용 방법','개발자가 알아두면 좋은 AI 서비스','쇼츠 제작에 유용한 AI 도구','AI 서비스를 선택할 때 확인할 조건','AI API를 처음 사용할 때 알아둘 것']},
+  // 계산기는 생활·직장·금융 계산기와 연결되는 글을 생산합니다.
+  calc:{name:'계산기',emoji:'🧮',url:'https://flick-calc.carpick.workers.dev/',description:'생활에 필요한 다양한 계산기를 한곳에서 이용하는 FLiCK 계산기',topics:['연봉 실수령액 계산','퇴직금 계산','연차수당 계산','대출이자 계산','예금·적금 이자 계산','월급 실수령액 계산','세후 연봉 계산','퇴직금 계산 전에 알아둘 것','연차수당 계산 방법','대출 원리금 계산 방법','예금과 적금 이자 차이','생활비 계산 방법','직장인이 자주 쓰는 계산기','금융 계산기를 활용하는 방법','계산 결과를 확인할 때 주의할 점']}
+};
+let currentSite='mingka';
+const usedKey='flik_ai_used_topics_v3';
 
-// AI가 실패해도 주제를 계속 만들 수 있도록 다양한 조합을 준비합니다.
-const subjects=['자동차 장기렌트','자동차 리스','신차 구매','중고차 구매','자동차 보험','차량 유지비','장기렌터카 계약','리스 계약','자동차 보증금','리스 선납금','장기렌터카 주행거리','자동차 계약기간','계약 종료 후 차량','첫 차 선택','출퇴근용 자동차','가족용 자동차','전기차','하이브리드 자동차','SUV 선택','세단 선택','경차 선택','자동차 세금','자동차 보험료','차량 감가상각','월 납입금 비교','렌트와 리스 비교'];
-const endings=['계약 전에 꼭 확인할 기준','비교할 때 먼저 살펴볼 조건','초보자가 놓치기 쉬운 부분','비용을 따질 때 확인할 항목','내 상황에 맞는 선택 기준','알아두면 좋은 체크포인트','이용 전에 확인하면 좋은 내용','선택할 때 주의할 점','장단점을 비교하는 방법','실제로 알아볼 때 필요한 정보'];
+// 사이트별로 이미 사용한 주제를 저장해 중복을 줄입니다.
+function used(){try{return JSON.parse(localStorage.getItem(usedKey)||'{}')}catch(e){return{}}}
+function saveUsed(a){localStorage.setItem(usedKey,JSON.stringify(a))}
+function localTopic(){
+  const site=SITES[currentSite], data=used(), u=data[currentSite]||[], pool=[];
+  const endings=['알아두면 좋은 기준','비교할 때 확인할 조건','초보자가 놓치기 쉬운 부분','선택 전에 체크할 항목','쉽게 이해하는 방법','이용 전에 알아둘 내용','처음 알아볼 때 필요한 정보','선택할 때 주의할 점'];
+  for(const s of site.topics)for(const e of endings){const t=`${s}, ${e}`;if(!u.includes(t))pool.push(t)}
+  return pool[Math.floor(Math.random()*pool.length)]||site.topics[Math.floor(Math.random()*site.topics.length)];
+}
+function setTopic(t){
+  const s=document.getElementById('topic');s.innerHTML='';
+  const o=document.createElement('option');o.value=t;o.textContent=t;s.appendChild(o);s.value=t;
+  const data=used();data[currentSite]=data[currentSite]||[];if(!data[currentSite].includes(t))data[currentSite].push(t);saveUsed(data);
+  document.getElementById('topicManual').value='';
+}
+function updateSiteInfo(){
+  const site=SITES[currentSite];
+  document.getElementById('siteInfo').innerHTML=`<strong>${site.emoji} ${site.name}</strong><span>${site.description}</span><br><a href="${site.url}" target="_blank" rel="noopener">${site.url}</a>`;
+  document.getElementById('topic').innerHTML='<option value="">새로운 주제를 뽑아주세요.</option>';
+  document.getElementById('topicManual').value='';
+  document.getElementById('status').textContent=`${site.name} 글 생산기 준비 완료`;
+}
 
-function used(){try{return JSON.parse(localStorage.getItem(usedKey)||'[]')}catch(e){return[]}}
-function saveUsed(a){localStorage.setItem(usedKey,JSON.stringify(a.slice(-500)))}
-function localTopic(){let u=used(),pool=[];for(const s of subjects)for(const e of endings){const t=`${s}, ${e}`;if(!u.includes(t))pool.push(t)}return pool[Math.floor(Math.random()*pool.length)]||'자동차를 선택할 때 예산과 이용 기간을 함께 살펴보는 방법'}
-function setTopic(t){const s=document.getElementById('topic');s.innerHTML='';const o=document.createElement('option');o.value=t;o.textContent=t;s.appendChild(o);s.value=t;let u=used();if(!u.includes(t))u.push(t);saveUsed(u);document.getElementById('topicManual').value=''}
-
-// Workers AI 응답을 호출합니다. API 키는 브라우저에서 전혀 사용하지 않습니다.
+// Workers AI 응답을 호출합니다. API 키는 브라우저에서 사용하지 않습니다.
 async function callAI(prompt){
   const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
   const d=await r.json().catch(()=>({}));
@@ -66,10 +100,10 @@ function parseJSON(raw){
 }
 
 async function aiTopic(){
-  const old=used().slice(-100);
-  const prompt=`자동차 정보 블로그 밍카의 새로운 글 주제를 1개만 만들어라. 장기렌트, 자동차 리스, 신차, 중고차, 보험, 세금, 유지비, 계약, 전기차 등 자동차 이용과 관련된 구체적인 질문·비교·체크포인트·선택 기준이어야 한다. 20~55자. 제목 한 줄만 출력한다. 이전 주제와 겹치지 않게 한다. 이전 주제: ${old.join(' | ')}`;
+  const site=SITES[currentSite], old=(used()[currentSite]||[]).slice(-100);
+  const prompt=`FLiCK의 ${site.name} 사이트로 유입을 만들 한국 네이버 블로그의 새로운 글 주제를 1개만 만들어라. 사이트 설명: ${site.description}. 관련 주제 예시: ${site.topics.join(', ')}. 검색자가 실제로 궁금해할 만한 구체적인 질문, 비교, 사용법, 체크포인트 또는 선택 기준이어야 한다. 20~55자. 제목 한 줄만 출력한다. 이전 주제와 겹치지 않게 한다. 이전 주제: ${old.join(' | ')}`;
   try{
-    let t=(await callAI(prompt)).replace(/^['"“”]+|['"“”]+$/g,'').trim();
+    const t=(await callAI(prompt)).replace(/^['"“”]+|['"“”]+$/g,'').trim();
     if(t.length>=10&&t.length<=70&&!old.includes(t)){setTopic(t);return}
   }catch(e){}
   setTopic(localTopic());
@@ -77,25 +111,43 @@ async function aiTopic(){
 
 function selectedTopic(){return document.getElementById('topicManual').value.trim()||document.getElementById('topic').value.trim()}
 function promptFor(t){
+  const site=SITES[currentSite];
   const len=document.getElementById('length').value==='short'?'900~1200자':document.getElementById('length').value==='long'?'2200~3000자':'1400~1900자';
-  return `한국 네이버 블로그용 자동차 정보글을 작성하라. 주제: ${t}. 분량: ${len}.
+  return `한국 네이버 블로그용 정보글을 작성하라. 현재 홍보 대상 사이트는 ${site.name}이다. 사이트 설명: ${site.description}. 주제: ${t}. 분량: ${len}.
 첫 부분에는 독자가 부담 없이 읽을 수 있는 자연스러운 인사말 2~3문장을 넣는다.
 본문은 4~6개의 소제목으로 나누고 각 소제목마다 충분한 설명을 한다.
 본문의 핵심 내용 사이에 이미지가 들어갈 위치를 4~6곳 만든다. 반드시 [IMAGE_1] 다음 줄에 [이미지 설명: 실제로 만들기 쉬운 구체적인 장면] 형식으로 표시한다. 번호는 1부터 순서대로 사용한다.
 마지막에는 핵심 내용을 자연스럽게 정리하고 2~3문장의 끝인사를 넣는다.
-끝인사 뒤에는 밍카를 과하지 않게 소개하고 URL을 단독 줄에 넣는다: ${MINGKA_URL}
-확인되지 않은 가격, 할인율, 순위, 통계, 특정 업체의 우월성을 만들어내지 않는다. 모르는 내용은 일반적인 기준으로 표현한다. 개인정보 수집을 유도하는 표현을 넣지 않는다.
+끝인사 뒤에는 ${site.name}을 과하지 않게 소개하고 URL을 단독 줄에 넣는다: ${site.url}
+사이트에서 제공한다고 확인되지 않은 기능, 가격, 할인율, 순위, 통계, 특정 업체의 우월성을 만들어내지 않는다. 모르는 내용은 일반적인 기준으로 표현한다. 개인정보 수집을 유도하는 표현을 넣지 않는다.
 반드시 JSON 하나만 출력한다. 형식: {"title":"검색하기 좋은 자연스러운 제목","body":"본문","tags":"#태그 #태그 #태그"}`;
 }
 
-// 새 주제 버튼을 누르면 AI를 먼저 시도하고 실패하면 로컬 조합을 사용합니다.
-document.getElementById('randomBtn').onclick=async()=>{const b=document.getElementById('randomBtn');b.disabled=true;document.getElementById('status').textContent='새로운 자동차 주제를 만드는 중...';try{await aiTopic();document.getElementById('status').textContent='새 주제 선택 완료'}finally{b.disabled=false}};
+// 탭을 누르면 현재 글 생산 대상 사이트를 바꿉니다.
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.onclick=()=>{
+    currentSite=tab.dataset.site;
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    tab.classList.add('active');
+    updateSiteInfo();
+  };
+});
 
-// 선택한 주제로 전체 글을 생성합니다.
+// 처음 화면은 밍카 탭으로 시작합니다.
+updateSiteInfo();
+
+// 새 주제 버튼은 현재 선택한 사이트에 맞는 주제를 만듭니다.
+document.getElementById('randomBtn').onclick=async()=>{
+  const b=document.getElementById('randomBtn');b.disabled=true;document.getElementById('status').textContent=`${SITES[currentSite].name}의 새로운 주제를 만드는 중...`;
+  try{await aiTopic();document.getElementById('status').textContent=`${SITES[currentSite].name} 새 주제 선택 완료`}
+  finally{b.disabled=false}
+};
+
+// 선택한 사이트와 주제로 전체 글을 생성합니다.
 document.getElementById('generateBtn').onclick=async()=>{
   const t=selectedTopic();
   if(!t){alert('먼저 주제를 선택해주세요.');return}
-  const b=document.getElementById('generateBtn');b.disabled=true;document.getElementById('status').textContent='Cloudflare AI가 글을 작성하고 있습니다...';
+  const b=document.getElementById('generateBtn');b.disabled=true;document.getElementById('status').textContent=`${SITES[currentSite].name}용 글을 작성하고 있습니다...`;
   try{
     const d=parseJSON(await callAI(promptFor(t)));
     if(!d.title||!d.body)throw Error('제목 또는 본문이 없습니다.');
@@ -103,10 +155,14 @@ document.getElementById('generateBtn').onclick=async()=>{
     document.getElementById('body').value=String(d.body).trim();
     document.getElementById('tags').value=d.tags||'';
     document.getElementById('status').textContent='글 생성 완료 ✓';
-  }catch(e){document.getElementById('status').textContent='생성 실패: '+e.message}finally{b.disabled=false}
+  }catch(e){document.getElementById('status').textContent='생성 실패: '+e.message}
+  finally{b.disabled=false}
 };
 
-document.getElementById('copyBtn').onclick=async()=>{const s=[document.getElementById('title').value,document.getElementById('body').value,document.getElementById('tags').value].filter(Boolean).join('\n\n');await navigator.clipboard.writeText(s);document.getElementById('status').textContent='전체 글을 복사했습니다.'};
+document.getElementById('copyBtn').onclick=async()=>{
+  const s=[document.getElementById('title').value,document.getElementById('body').value,document.getElementById('tags').value].filter(Boolean).join('\n\n');
+  await navigator.clipboard.writeText(s);document.getElementById('status').textContent='전체 글을 복사했습니다.'
+};
 </script>
 </body>
 </html>
