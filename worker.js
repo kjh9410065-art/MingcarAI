@@ -1,4 +1,4 @@
-// 밍카 AI 블로그 작성기 Worker
+// FLiCK AI 블로그 작성기 Worker
 // 브라우저에서 API 키를 입력하지 않고 Cloudflare Workers AI를 호출합니다.
 export default {
   async fetch(request, env) {
@@ -13,10 +13,12 @@ export default {
           return json({ error: '프롬프트가 없습니다.' }, 400);
         }
 
-        // 혼자 사용하는 블로그 작성기라 가벼운 모델을 기본으로 사용합니다.
-        const result = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        // 2026년 현재 사용 가능한 Cloudflare Workers AI 모델로 생성합니다.
+        // 기존 llama-3.1-8b-instruct는 2026-05-30에 폐기되어 3.2 3B로 교체했습니다.
+        const result = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
           messages: [
-            { role: 'system', content: '너는 한국어 자동차 정보 블로그 작성 도우미다. 확인되지 않은 사실을 만들지 않는다.' },
+            // 밍카·HUB·계산기 세 사이트 모두 사용할 수 있도록 범용 블로그 작성 역할로 설정합니다.
+            { role: 'system', content: '너는 한국어 정보 블로그 작성 도우미다. 확인되지 않은 사실, 가격, 통계, 순위 등을 임의로 만들지 않는다. 사용자가 요청한 사이트와 주제에 맞는 자연스러운 글을 작성한다.' },
             { role: 'user', content: prompt }
           ],
           max_tokens: 3500,
