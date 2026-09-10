@@ -3,7 +3,7 @@
   let lastBody = '';
   let running = false;
 
-  // 이미지 번호, 설명, 앞뒤 문맥, 그리고 가장 가까운 소제목을 함께 추출합니다.
+  // 이미지 번호, 설명, 앞뒤 문맥, 가장 가까운 소제목을 함께 추출합니다.
   function extractPrompts(body){
     const out = [];
     const re = /\[IMAGE_(\d+)\][\r\n]+\[이미지 설명:\s*([^\]]+)\]/g;
@@ -13,7 +13,6 @@
       if(!prompt || prompt.includes('실제로 만들기 쉬운 구체적인 장면')) continue;
       const before = body.slice(Math.max(0, m.index - 1200), m.index);
       const after = body.slice(m.index + m[0].length, m.index + m[0].length + 500);
-      // 이미지 바로 앞에 있는 가장 최근의 ## 소제목을 찾아 이미지 목적을 명확히 합니다.
       const headings = [...before.matchAll(/##\s+([^\n]+)/g)];
       const heading = headings.length ? headings[headings.length - 1][1].trim() : '';
       out.push({number:Number(m[1]), prompt, heading, context:`${before}\n${after}`.trim()});
@@ -63,29 +62,35 @@
     return box;
   }
 
-  // 이미지별 역할을 정해 5장이 전부 비슷한 사무실 사진이 되는 것을 방지합니다.
+  // 핵심 단어를 이용해 AI가 문맥과 무관한 소재를 선택하지 못하도록 시각적 기준점을 정합니다.
+  function visualAnchor(site, text){
+    const s = String(text || '').toLowerCase();
+    if(site === 'mingka'){
+      if(/장기렌트|리스|계약기간|계약서|월 납입|납입금|계약 조건/.test(s)) return 'PRIMARY VISUAL ANCHOR: a car key resting directly on one single rental or lease contract document on a clean desk; this exact pair is the dominant subject';
+      if(/연비|연료|주행거리|연료비|전비/.test(s)) return 'PRIMARY VISUAL ANCHOR: one modern car dashboard instrument cluster viewed straight on; the dashboard is the dominant subject';
+      if(/유지비|정비|수리|소모품|보험료|자동차세|세금/.test(s)) return 'PRIMARY VISUAL ANCHOR: one automotive maintenance invoice with a car key on a clean desk; the invoice is blank and unreadable';
+      if(/가격|비용|총비용|초기 비용/.test(s)) return 'PRIMARY VISUAL ANCHOR: one car key beside one simple blank cost document on a clean desk; no dashboard';
+      return 'PRIMARY VISUAL ANCHOR: one modern car or one clearly relevant automotive object directly named in the section; do not invent another automotive concept';
+    }
+    if(site === 'calc'){
+      if(/연봉|월급|급여|실수령|소득/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one blank salary statement on a clean office desk; the calculator and paper are dominant';
+      if(/세금|소득세|원천징수/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one blank tax document on a clean office desk';
+      if(/대출|원리금|이자율/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one blank loan document on a clean desk';
+      if(/예금|적금|저축|복리|단리/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one savings notebook and blank financial paper on a clean desk';
+      if(/생활비|지출|가계부|예산|소비|영수증/.test(s)) return 'PRIMARY VISUAL ANCHOR: a small stack of blank receipts beside one calculator on a clean desk';
+      return 'PRIMARY VISUAL ANCHOR: one calculator as the dominant subject, with at most one closely related blank paper item';
+    }
+    if(/이미지 생성|그림 생성|사진 생성/.test(s)) return 'PRIMARY VISUAL ANCHOR: one desktop monitor displaying a generic image-generation workspace with simple abstract blocks and no readable text';
+    if(/API|개발|코드|프로그래밍/.test(s)) return 'PRIMARY VISUAL ANCHOR: one laptop displaying a generic code editor with abstract lines and no readable text';
+    if(/영상|동영상|편집/.test(s)) return 'PRIMARY VISUAL ANCHOR: one desktop monitor displaying a generic video-editing timeline with abstract blocks and no readable text';
+    return 'PRIMARY VISUAL ANCHOR: one computer or digital device directly named in the section, with no unrelated objects';
+  }
+
+  // 이미지별 역할을 정해 서로 다른 문단이 비슷한 사진만 만드는 것을 줄입니다.
   function imageRole(index, site){
-    if(site === 'calc') return [
-      '주제의 핵심 계산 도구를 대표하는 장면',
-      '계산에 실제로 필요한 핵심 자료를 대표하는 장면',
-      '본문에서 설명한 계산 대상 또는 비교 대상을 대표하는 장면',
-      '계산 결과를 확인하는 데 사용하는 핵심 도구를 대표하는 장면',
-      '글의 핵심 내용을 가장 직관적으로 보여주는 대표 장면'
-    ][index % 5];
-    if(site === 'mingka') return [
-      '주제의 핵심 자동차 요소를 대표하는 장면',
-      '본문에서 설명한 계약 또는 이용 조건의 핵심 요소를 대표하는 장면',
-      '본문에서 설명한 차량 관련 핵심 요소를 대표하는 장면',
-      '본문에서 설명한 비용 또는 조건의 핵심 요소를 대표하는 장면',
-      '글의 핵심 내용을 가장 직관적으로 보여주는 대표 장면'
-    ][index % 5];
-    return [
-      '주제의 핵심 AI 또는 디지털 도구를 대표하는 장면',
-      '본문에서 설명한 사용 과정의 핵심 기기를 대표하는 장면',
-      '본문에서 설명한 비교 대상의 핵심 기능을 대표하는 장면',
-      '본문에서 설명한 작업 결과를 대표하는 장면',
-      '글의 핵심 내용을 가장 직관적으로 보여주는 대표 장면'
-    ][index % 5];
+    if(site === 'calc') return ['핵심 계산 도구','계산에 필요한 핵심 자료','본문의 계산 대상','계산 결과를 확인하는 도구','글의 핵심 내용을 보여주는 대표 장면'][index % 5];
+    if(site === 'mingka') return ['핵심 자동차 요소','계약 또는 이용 조건의 핵심 요소','차량 관련 핵심 요소','비용 또는 조건의 핵심 요소','글의 핵심 내용을 보여주는 대표 장면'][index % 5];
+    return ['핵심 AI 또는 디지털 도구','사용 과정의 핵심 기기','비교 대상의 핵심 기능','작업 결과','글의 핵심 내용을 보여주는 대표 장면'][index % 5];
   }
 
   async function makeImages(body){
@@ -105,9 +110,10 @@
         const item = original[i];
         status.textContent = `이미지 ${i+1}/${original.length} 프롬프트 검수 중...`;
         const role = imageRole(i, site);
-        const reviewed = await reviewImagePrompt(topic, site, item.prompt, `${role}\n${item.context}`, item.heading);
-        // AI 검수 결과보다 글의 핵심 주제와 소제목을 우선하도록 최종 지시를 명시합니다.
-        const finalPrompt = `${reviewed}. ARTICLE TOPIC: ${topic}. ARTICLE SECTION: ${item.heading || role}. The primary subject must directly and unmistakably represent this section. Show exactly one main subject or one tightly related pair. Do not invent a generic lifestyle scene. Do not add objects merely for decoration. Do not add a person unless the article explicitly requires a person. Photorealistic Korean editorial photography, realistic materials, natural daylight, clean composition. No collage, no split screen, no fantasy, no illustration, no anime. No readable text, no letters, no numbers, no logos, no brand names, no signs, no watermark.`;
+        const anchor = visualAnchor(site, `${topic}\n${item.heading}\n${item.prompt}\n${item.context}`);
+        const reviewed = await reviewImagePrompt(topic, site, item.prompt, `${role}\n${anchor}\n${item.context}`, item.heading);
+        // 기준점을 먼저 배치하고 실제 촬영 가능한 구도까지 지정해 이미지가 다른 주제로 이탈하지 않게 합니다.
+        const finalPrompt = `${anchor}. ARTICLE TOPIC: ${topic}. ARTICLE SECTION: ${item.heading || role}. IMAGE PURPOSE: ${role}. ${reviewed}. The primary visual anchor is mandatory and must occupy most of the frame. The image must communicate the exact meaning of the section at first glance. Show exactly one clear scene and no more than two closely related objects. Never replace the anchor with a generic lifestyle scene. Never add decorative objects or an unrelated vehicle, person, chart, screen, or document. Use a realistic Korean editorial photograph, medium close-up product/document composition, eye-level or slight top-down camera angle, natural daylight, realistic materials, crisp focus on the primary subject, subtle background blur only when useful. No collage, no split screen, no fantasy, no illustration, no anime, no painting. No people, no faces, no hands, no bodies. No readable text, no letters, no numbers, no logos, no brand names, no signs, no watermark. If a document or monitor is necessary, show it partially and make all content completely unreadable with neutral lines or blocks only.`;
 
         const card = document.createElement('div');
         card.style.margin = '12px 0 20px'; card.style.padding = '10px';
@@ -115,7 +121,6 @@
         card.innerHTML = `<strong>이미지 ${item.number}</strong><div style="font-size:12px;color:#777;margin:6px 0 10px">원본 설명: ${item.prompt}</div><div style="padding:30px;text-align:center;background:#fafafa;border-radius:10px">생성 중...</div>`;
         list.appendChild(card);
 
-        // 최종 프롬프트 하나만 FLUX에 전달합니다.
         const image = await generateImage(finalPrompt);
         const img = document.createElement('img');
         img.src = image; img.alt = item.prompt; img.style.display = 'block';
