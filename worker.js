@@ -9,18 +9,14 @@ export default {
       try {
         const body = await request.json();
         const prompt = String(body.prompt || '').trim();
-        if (!prompt) {
-          return json({ error: '프롬프트가 없습니다.' }, 400);
-        }
+        if (!prompt) return json({ error: '프롬프트가 없습니다.' }, 400);
 
-        // 블로그 글처럼 긴 한국어 결과를 안정적으로 만들기 위해 70B 모델을 사용합니다.
-        // JSON Mode를 함께 사용해 제목·본문·해시태그 형식을 안정적으로 맞춥니다.
+        // 긴 한국어 정보글을 안정적으로 만들기 위한 Cloudflare Workers AI 모델입니다.
         const result = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
           messages: [
-            // 세 사이트 모두 사용할 수 있는 한국어 정보 블로그 작성 역할입니다.
             {
               role: 'system',
-              content: '너는 한국어 네이버 블로그 전문 작성자다. 반드시 자연스러운 한국어만 사용한다. 영어, 힌디어, 일본어 등 다른 언어 단어를 불필요하게 섞지 않는다. 확인되지 않은 사실, 가격, 통계, 순위 등을 임의로 만들지 않는다. 사용자가 요청한 사이트와 주제에 맞는 읽기 쉬운 정보글을 작성한다.'
+              content: '너는 한국어 네이버 블로그 전문 작성자다. 제목, 본문, 해시태그를 반드시 자연스러운 한국어로 작성한다. 일본어, 중국어, 힌디어 등 다른 언어로 작성하지 않는다. 확인되지 않은 사실, 가격, 통계, 순위 등을 임의로 만들지 않는다. 사용자가 요청한 사이트와 주제에 맞는 읽기 쉬운 정보글을 작성한다. 이미지 설명은 실제 이미지 생성에 바로 사용할 수 있도록 구체적인 장면으로 작성한다.'
             },
             { role: 'user', content: prompt }
           ],
@@ -41,7 +37,6 @@ export default {
           }
         });
 
-        // 모델 응답은 일반 문자열일 수도 있고 JSON 객체일 수도 있으므로 브라우저가 항상 문자열을 받게 합니다.
         const response = result?.response;
         const text = typeof response === 'string' ? response : JSON.stringify(response || {});
         return json({ text });
@@ -55,33 +50,32 @@ export default {
       try {
         const body = await request.json();
         const prompt = String(body.prompt || '').trim();
-        if (!prompt) {
-          return json({ error: '이미지 설명이 없습니다.' }, 400);
-        }
+        if (!prompt) return json({ error: '이미지 설명이 없습니다.' }, 400);
 
-        // 빠른 이미지 생성을 위해 FLUX.1 Schnell을 사용합니다.
+        // FLUX.1 schnell의 공식 파라미터는 num_steps가 아니라 steps입니다.
+        // 4단계로 생성해 속도와 사용량을 우선합니다.
         const result = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-          prompt: prompt.slice(0, 2000),
-          num_steps: 4
+          prompt: prompt.slice(0, 2048),
+          steps: 4,
+          seed: Math.floor(Math.random() * 2147483647)
         });
 
-        if (!result?.image) {
-          throw new Error('이미지 응답이 비어 있습니다.');
-        }
+        if (!result?.image) throw new Error('이미지 응답이 비어 있습니다.');
 
         // 브라우저에서 바로 표시할 수 있도록 Data URI로 반환합니다.
-        return json({ image: `data:image/png;base64,${result.image}` });
+        return json({ image: `data:image/jpeg;base64,${result.image}` });
       } catch (error) {
         return json({ error: error?.message || '이미지 생성에 실패했습니다.' }, 500);
       }
     }
 
     // index.html을 제공할 때 이미지 자동 생성 스크립트를 함께 주입합니다.
-    // 기존 화면 코드를 크게 건드리지 않고 한 번의 글 생성으로 이미지를 이어서 만들 수 있게 합니다.
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       const response = await env.ASSETS.fetch(request);
       const html = await response.text();
-      const injected = html.replace('</body>', '<script src="/enhance.js?v=1"></script></body>');
+      const injected = html.includes('enhance.js')
+        ? html
+        : html.replace('</body>', '<script src="/enhance.js?v=2"></script></body>');
       return new Response(injected, {
         status: response.status,
         headers: new Headers(response.headers)
