@@ -1,9 +1,9 @@
-/* FLiCK AI 블로그 작성기 이미지·제목 보정 기능 */
+/* FLiCK AI 블로그 작성기 이미지 자동 생성 기능 */
 (function(){
   let lastBody = '';
   let running = false;
 
-  // 본문에서 [IMAGE_1] 아래의 이미지 설명을 찾아 실제 이미지 생성에 사용합니다.
+  // 본문에서 이미지 번호와 설명을 찾아 실제 이미지 생성에 사용합니다.
   function extractPrompts(body){
     const out = [];
     const re = /\[IMAGE_(\d+)\][\r\n]+\[이미지 설명:\s*([^\]]+)\]/g;
@@ -58,6 +58,12 @@
     return box;
   }
 
+  // 이미지 설명을 실제 사진 중심의 프롬프트로 변환합니다.
+  // 인물 초상이나 동양화로 빠지는 현상을 막고, 글의 주제를 보여주는 사물·공간 중심 장면을 우선합니다.
+  function buildVisualPrompt(prompt){
+    return `${prompt}. Create a modern, realistic commercial blog photograph that directly illustrates this subject. Focus on relevant objects, documents, devices, vehicles, workspace, dashboard, calculator, comparison materials, or a realistic scene rather than a portrait. Clean contemporary setting, natural lighting, realistic photography, high detail, simple composition. No people as the main subject. No portrait, no character illustration, no anime, no cartoon, no painting, no watercolor, no traditional Asian art, no Chinese or Japanese cultural motifs, no costumes, no calligraphy, no decorative characters. Absolutely no readable text, letters, numbers, symbols, logos, signs, watermark, or writing anywhere in the image. Do not invent unrelated objects or themes.`;
+  }
+
   // 한 장씩 생성해 진행 상황을 화면에 보여줍니다.
   async function makeImages(body){
     if(running) return;
@@ -71,7 +77,7 @@
 
     try{
       for(let i=0;i<prompts.length;i++){
-        status.textContent = `글 생성 완료 · 이미지 ${i+1}/${prompts.length} 생성 중...`;
+        status.textContent = `글 검수 완료 · 이미지 ${i+1}/${prompts.length} 생성 중...`;
         const p = prompts[i];
         const card = document.createElement('div');
         card.style.margin = '12px 0 20px';
@@ -81,9 +87,8 @@
         card.innerHTML = `<strong>이미지 ${p.number}</strong><div style="font-size:12px;color:#777;margin:6px 0 10px">${p.prompt}</div><div style="padding:30px;text-align:center;background:#fafafa;border-radius:10px">생성 중...</div>`;
         list.appendChild(card);
 
-        const image = await generateImage(
-          `${p.prompt}. 네이버 블로그에 사용할 자연스러운 실제 사진 느낌의 이미지. 깔끔한 구도, 자연스러운 조명, 고품질. 이미지 안에 글자, 문구, 로고, 워터마크를 넣지 않는다.`
-        );
+        // 원래 설명에 강한 시각 지침을 덧붙여 주제와 무관한 인물화·동양화를 방지합니다.
+        const image = await generateImage(buildVisualPrompt(p.prompt));
 
         const img = document.createElement('img');
         img.src = image;
@@ -103,7 +108,7 @@
     }
   }
 
-  // 글 생성 직후 계산기 제목이 비어 있는 경우 자동으로 보완하고, 이미지 생성을 시작합니다.
+  // 글 생성 직후 계산기 제목을 보완하고 이미지 자동 생성을 시작합니다.
   setInterval(()=>{
     ensureTitle();
     const body = document.getElementById('body')?.value || '';
