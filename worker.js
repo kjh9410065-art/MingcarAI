@@ -50,7 +50,45 @@ export default {
       }
     }
 
-    // 나머지 요청은 index.html 등 정적 파일에서 제공합니다.
+    // 이미지 설명을 받으면 FLUX로 실제 이미지를 생성합니다.
+    if (url.pathname === '/api/generate-image' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const prompt = String(body.prompt || '').trim();
+        if (!prompt) {
+          return json({ error: '이미지 설명이 없습니다.' }, 400);
+        }
+
+        // 빠른 이미지 생성을 위해 FLUX.1 Schnell을 사용합니다.
+        const result = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
+          prompt: prompt.slice(0, 2000),
+          num_steps: 4
+        });
+
+        if (!result?.image) {
+          throw new Error('이미지 응답이 비어 있습니다.');
+        }
+
+        // 브라우저에서 바로 표시할 수 있도록 Data URI로 반환합니다.
+        return json({ image: `data:image/png;base64,${result.image}` });
+      } catch (error) {
+        return json({ error: error?.message || '이미지 생성에 실패했습니다.' }, 500);
+      }
+    }
+
+    // index.html을 제공할 때 이미지 자동 생성 스크립트를 함께 주입합니다.
+    // 기존 화면 코드를 크게 건드리지 않고 한 번의 글 생성으로 이미지를 이어서 만들 수 있게 합니다.
+    if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+      const response = await env.ASSETS.fetch(request);
+      const html = await response.text();
+      const injected = html.replace('</body>', '<script src="/enhance.js?v=1"></script></body>');
+      return new Response(injected, {
+        status: response.status,
+        headers: new Headers(response.headers)
+      });
+    }
+
+    // 나머지 요청은 정적 파일에서 제공합니다.
     return env.ASSETS.fetch(request);
   }
 };
