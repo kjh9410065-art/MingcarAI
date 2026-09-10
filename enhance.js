@@ -1,4 +1,4 @@
-/* FLiCK AI 블로그 작성기 이미지 자동 생성 기능 */
+/* FLiCK AI 블로그 작성기 이미지·제목 보정 기능 */
 (function(){
   let lastBody = '';
   let running = false;
@@ -9,9 +9,28 @@
     const re = /\[IMAGE_(\d+)\][\r\n]+\[이미지 설명:\s*([^\]]+)\]/g;
     let m;
     while((m = re.exec(body)) && out.length < 6){
-      out.push({ number: Number(m[1]), prompt: m[2].trim() });
+      const prompt = m[2].trim();
+      // AI가 예시 문구를 그대로 출력한 경우에는 이미지 생성 대상에서 제외합니다.
+      if(prompt && !prompt.includes('실제로 만들기 쉬운 구체적인 장면')){
+        out.push({ number: Number(m[1]), prompt });
+      }
     }
     return out;
+  }
+
+  // 계산기 글에서 제목이 비어 있으면 주제를 기반으로 제목을 자동 보완합니다.
+  function ensureTitle(){
+    const title = document.getElementById('title');
+    const topic = document.getElementById('topicManual')?.value.trim() || document.getElementById('topic')?.value.trim() || '';
+    const body = document.getElementById('body')?.value.trim() || '';
+    const calcTab = [...document.querySelectorAll('.tab')].find(x => x.dataset.site === 'calc');
+    const isCalc = calcTab?.classList.contains('active');
+    if(!title || title.value.trim() || !isCalc || !body) return;
+
+    // 주제 자체를 그대로 쓰기보다 검색형 제목으로 자연스럽게 정리합니다.
+    let base = topic.replace(/[,，]\s*(알아두면 좋은 기준|비교할 때 확인할 조건|초보자가 놓치기 쉬운 부분|선택 전에 체크할 항목|쉽게 이해하는 방법|이용 전에 알아둘 내용|처음 알아볼 때 필요한 정보|선택할 때 주의할 점)$/,'').trim();
+    if(!base) base = '생활에 유용한 계산 방법';
+    title.value = `${base}, 계산 전에 알아둘 점`;
   }
 
   // 이미지 생성 API를 호출합니다.
@@ -84,8 +103,9 @@
     }
   }
 
-  // 기존 글 생성 코드가 본문 textarea에 값을 넣은 뒤 자동으로 이미지 생성을 시작합니다.
+  // 글 생성 직후 계산기 제목이 비어 있는 경우 자동으로 보완하고, 이미지 생성을 시작합니다.
   setInterval(()=>{
+    ensureTitle();
     const body = document.getElementById('body')?.value || '';
     if(body && body !== lastBody && /\[IMAGE_\d+\]/.test(body)){
       lastBody = body;
