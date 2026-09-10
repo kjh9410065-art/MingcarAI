@@ -3,8 +3,7 @@
   let lastBody = '';
   let running = false;
 
-  // 이미지 번호와 함께 이미지 바로 앞뒤의 본문 문맥도 추출합니다.
-  // 단순한 한 줄 설명만 보내면 이미지가 글과 무관해질 수 있어 소제목과 주변 문장을 함께 검수합니다.
+  // 이미지 번호, 설명, 그리고 해당 이미지 앞뒤의 본문 문맥을 함께 추출합니다.
   function extractPrompts(body){
     const out = [];
     const re = /\[IMAGE_(\d+)\][\r\n]+\[이미지 설명:\s*([^\]]+)\]/g;
@@ -12,10 +11,8 @@
     while((m = re.exec(body)) && out.length < 6){
       const prompt = m[2].trim();
       if(!prompt || prompt.includes('실제로 만들기 쉬운 구체적인 장면')) continue;
-
-      // 이미지 앞뒤의 실제 글 내용을 가져와 이미지의 목적을 명확하게 전달합니다.
-      const before = body.slice(Math.max(0, m.index - 700), m.index);
-      const after = body.slice(m.index + m[0].length, m.index + m[0].length + 350);
+      const before = body.slice(Math.max(0, m.index - 1000), m.index);
+      const after = body.slice(m.index + m[0].length, m.index + m[0].length + 500);
       out.push({number:Number(m[1]), prompt, context:`${before}\n${after}`.trim()});
     }
     return out;
@@ -42,11 +39,10 @@
     return d.image;
   }
 
-  // 이미지 설명뿐 아니라 주변 본문과 사이트 정보를 함께 AI에게 보내 이미지 한 장의 목적을 확정합니다.
+  // 이미지 설명, 소제목 주변 문맥, 사이트 종류를 모두 AI 검수 단계에 전달합니다.
   async function reviewImagePrompt(topic, site, source, context){
     const r = await fetch('/api/review-image-prompt', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({topic, site, prompt:source, context})
     });
     const d = await r.json().catch(()=>({}));
@@ -54,7 +50,6 @@
     return String(d.prompt).trim();
   }
 
-  // 글 아래에 실제 생성된 이미지를 표시합니다.
   function createGallery(){
     let box = document.getElementById('aiImageGallery');
     if(box) return box;
@@ -67,14 +62,14 @@
     return box;
   }
 
-  // 사이트마다 사용할 수 있는 대표적인 촬영 대상을 제한합니다.
+  // 사이트별 기본 방향은 유지하되, 원본 주제에서 벗어나지 않도록 합니다.
   function finalSceneRule(site){
-    if(site === 'calc') return 'modern Korean office desk still life; choose ONLY the single most relevant object or pair of closely related objects from the article, such as a calculator with blank paper, a laptop showing a generic blank calculation interface, or a notebook with a calculator; no people';
-    if(site === 'mingka') return 'modern Korean automotive scene; choose ONLY the single most relevant subject from the article, such as one car dashboard, one vehicle exterior, or one small group of contract papers with a car key; no people';
-    return 'modern technology scene; choose ONLY the single most relevant subject from the article, such as one laptop, one smartphone, or one simple device setup; no people';
+    if(site === 'calc') return 'Use only the exact calculator topic described in the prompt. Select the most relevant physical subject: calculator for calculation topics, calculator with blank financial paper for salary or tax topics, calculator with blank loan paper for loan topics, calculator with blank savings paper for interest topics, receipts with calculator for household spending topics. Do not combine unrelated objects.';
+    if(site === 'mingka') return 'Use only the exact automotive topic described in the prompt. Select the most relevant subject: one vehicle for vehicle topics, one dashboard for driving or fuel topics, car key with contract paper for rental or lease contract topics, maintenance items for maintenance topics. Do not combine unrelated objects.';
+    return 'Use only the exact AI or digital topic described in the prompt. Select the most relevant subject: one computer for AI software topics, one simple code editor screen for API development topics, one image-editing workspace for image generation topics, one video-editing workspace for video topics. Do not combine unrelated objects.';
   }
 
-  // 한 장씩 프롬프트를 검수한 뒤 생성합니다.
+  // 한 장씩 문맥을 읽고 프롬프트를 검수한 뒤 이미지를 생성합니다.
   async function makeImages(body){
     if(running) return;
     const original = extractPrompts(body);
@@ -90,9 +85,10 @@
     try{
       for(let i=0;i<original.length;i++){
         const item = original[i];
-        status.textContent = `이미지 프롬프트 ${i+1}/${original.length} 검수 중...`;
+        status.textContent = `이미지 ${i+1}/${original.length} 프롬프트 검수 중...`;
         const reviewed = await reviewImagePrompt(topic, site, item.prompt, item.context);
-        const finalPrompt = `${reviewed}. ${finalSceneRule(site)}. Photorealistic commercial blog photography, natural daylight, clean composition. No text, no letters, no numbers, no logos, no signs, no watermark.`;
+        // 검수 결과에 해당 이미지의 정확한 목적과 사이트별 범위를 추가합니다.
+        const finalPrompt = `${reviewed}. ${finalSceneRule(site)}. One clear subject, one clear scene, no collage, no split screen, no infographic unless the topic itself is specifically about a chart. Photorealistic editorial photography, realistic proportions, natural daylight, clean composition. No people, no faces, no hands, no bodies. No readable text, no letters, no numbers, no logos, no brand names, no signs, no watermark.`;
 
         const card = document.createElement('div');
         card.style.margin = '12px 0 20px';
@@ -102,7 +98,7 @@
         card.innerHTML = `<strong>이미지 ${item.number}</strong><div style="font-size:12px;color:#777;margin:6px 0 10px">원본 설명: ${item.prompt}</div><div style="padding:30px;text-align:center;background:#fafafa;border-radius:10px">생성 중...</div>`;
         list.appendChild(card);
 
-        // 최종 검수된 한 장면 프롬프트만 FLUX에 전달합니다.
+        // 최종 프롬프트 하나만 FLUX에 전달합니다.
         const image = await generateImage(finalPrompt);
         const img = document.createElement('img');
         img.src = image;
