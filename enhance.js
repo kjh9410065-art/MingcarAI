@@ -7,7 +7,7 @@
   let lastBody = '';
   let running = false;
 
-  // 본문에 삽입된 이미지 번호와 설명, 주변 문맥을 추출합니다.
+  // 본문에서 이미지 번호, 설명, 앞뒤 문맥을 추출합니다.
   function extractPrompts(body){
     const out=[];
     const re=/\[IMAGE_(\d+)\][\r\n]+\[이미지 설명:\s*([^\]]+)\]/g;
@@ -15,8 +15,8 @@
     while((m=re.exec(body)) && out.length<6){
       const prompt=m[2].trim();
       if(!prompt || prompt.includes('실제로 만들기 쉬운 구체적인 장면')) continue;
-      const before=body.slice(Math.max(0,m.index-1200),m.index);
-      const after=body.slice(m.index+m[0].length,m.index+m[0].length+500);
+      const before=body.slice(Math.max(0,m.index-1400),m.index);
+      const after=body.slice(m.index+m[0].length,m.index+m[0].length+700);
       const headings=[...before.matchAll(/##\s+([^\n]+)/g)];
       const heading=headings.length?headings[headings.length-1][1].trim():'';
       out.push({number:Number(m[1]),prompt,heading,context:`${before}\n${after}`.trim()});
@@ -40,38 +40,65 @@
     return String(d.prompt).trim();
   }
 
-  // 사이트와 주제에 맞는 시각적 중심 대상을 정해 이미지가 엉뚱한 장면으로 빠지는 것을 줄입니다.
-  function visualAnchor(site,text){
+  // 글의 주제에 맞는 핵심 장면을 정합니다.
+  // 문서 이미지만 반복되지 않도록 자동차 자체를 우선 시각화합니다.
+  function visualAnchor(site,text,index){
     const s=String(text||'').toLowerCase();
+
     if(site==='mingka'){
-      if(/장기렌트|리스|계약기간|계약서|월 납입|납입금|계약 조건/.test(s)) return 'PRIMARY VISUAL ANCHOR: a car key resting directly on one single rental or lease contract document on a clean desk';
-      if(/연비|연료|주행거리|연료비|전비/.test(s)) return 'PRIMARY VISUAL ANCHOR: one modern car dashboard instrument cluster viewed straight on';
-      if(/유지비|정비|수리|소모품|보험료|자동차세|세금/.test(s)) return 'PRIMARY VISUAL ANCHOR: one automotive maintenance invoice with a car key on a clean desk';
-      if(/가격|비용|총비용|초기 비용/.test(s)) return 'PRIMARY VISUAL ANCHOR: one car key beside one simple blank cost document on a clean desk';
-      return 'PRIMARY VISUAL ANCHOR: one modern car or one clearly relevant automotive object directly named in the section';
+      if(/연비|연료|주행거리|전비|충전/.test(s)){
+        return index%2===0
+          ? 'PRIMARY VISUAL ANCHOR: a modern car dashboard and instrument cluster photographed from the driver seat, with no readable numbers'
+          : 'PRIMARY VISUAL ANCHOR: a modern car parked at a clean charging or fuel station, photographed as a realistic automotive editorial photo';
+      }
+      if(/유지비|정비|수리|소모품|보험료|자동차세|세금/.test(s)){
+        return index%2===0
+          ? 'PRIMARY VISUAL ANCHOR: a clean modern car in a professional automotive service bay, no mechanic visible'
+          : 'PRIMARY VISUAL ANCHOR: a close automotive detail of a tire, wheel and clean car body in a service center';
+      }
+      if(/계약서|계약기간|계약 조건|월 납입|납입금|장기렌트|리스/.test(s)){
+        const scenes=[
+          'PRIMARY VISUAL ANCHOR: a modern mid-size car photographed from a three-quarter front angle in a clean Korean dealership lot',
+          'PRIMARY VISUAL ANCHOR: the interior of a modern car photographed from the open driver door, focusing on the steering wheel, center console and seats',
+          'PRIMARY VISUAL ANCHOR: a modern car parked neatly in an apartment parking area, photographed as a realistic Korean automotive editorial photo',
+          'PRIMARY VISUAL ANCHOR: a close-up of a modern car key placed beside the steering wheel inside a clean modern car, no document visible',
+          'PRIMARY VISUAL ANCHOR: a modern car photographed from a clean side profile in natural daylight, with the entire vehicle clearly visible'
+        ];
+        return scenes[index%scenes.length];
+      }
+      if(/가격|비용|총비용|초기 비용/.test(s)){
+        return index%2===0
+          ? 'PRIMARY VISUAL ANCHOR: a modern car photographed in a clean dealership lot with the entire vehicle clearly visible'
+          : 'PRIMARY VISUAL ANCHOR: a car key and steering wheel inside a modern car, photographed in close detail with no paper or screen';
+      }
+      return 'PRIMARY VISUAL ANCHOR: one modern car clearly related to the article topic, photographed as a realistic Korean automotive editorial photo';
     }
+
     if(site==='calc'){
-      if(/연봉|월급|급여|실수령|소득/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one blank salary statement on a clean office desk';
-      if(/세금|소득세|원천징수/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one blank tax document on a clean office desk';
-      if(/대출|원리금|이자율/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one blank loan document on a clean desk';
-      if(/예금|적금|저축|복리|단리/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside one savings notebook and blank financial paper on a clean desk';
-      if(/생활비|지출|가계부|예산|소비|영수증/.test(s)) return 'PRIMARY VISUAL ANCHOR: a small stack of blank receipts beside one calculator on a clean desk';
-      return 'PRIMARY VISUAL ANCHOR: one calculator as the dominant subject';
+      if(/연봉|월급|급여|실수령|소득/.test(s)) return index%2===0
+        ? 'PRIMARY VISUAL ANCHOR: one modern calculator beside a simple blank salary paper with no readable text'
+        : 'PRIMARY VISUAL ANCHOR: a calculator and a clean desk with coins arranged naturally, no readable text';
+      if(/세금|소득세|원천징수/.test(s)) return 'PRIMARY VISUAL ANCHOR: one modern calculator beside a completely blank tax-form-like paper with no readable text';
+      if(/대출|원리금|이자율/.test(s)) return 'PRIMARY VISUAL ANCHOR: one modern calculator beside a simple blank financial paper and a few coins, no readable text';
+      if(/예금|적금|저축|복리|단리/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside a simple savings notebook with no readable text and a few coins';
+      if(/생활비|지출|가계부|예산|소비|영수증/.test(s)) return 'PRIMARY VISUAL ANCHOR: one calculator beside a small stack of blank receipts and coins, no readable text';
+      return 'PRIMARY VISUAL ANCHOR: one modern calculator as the dominant subject on a clean desk';
     }
-    if(/이미지 생성|그림 생성|사진 생성/.test(s)) return 'PRIMARY VISUAL ANCHOR: one desktop monitor displaying a generic image-generation workspace with simple abstract blocks and no readable text';
-    if(/API|개발|코드|프로그래밍/.test(s)) return 'PRIMARY VISUAL ANCHOR: one laptop displaying a generic code editor with abstract lines and no readable text';
-    if(/영상|동영상|편집/.test(s)) return 'PRIMARY VISUAL ANCHOR: one desktop monitor displaying a generic video-editing timeline with abstract blocks and no readable text';
-    return 'PRIMARY VISUAL ANCHOR: one computer or digital device directly named in the section';
+
+    if(/이미지 생성|그림 생성|사진 생성/.test(s)) return 'PRIMARY VISUAL ANCHOR: one desktop monitor showing a generic image-generation interface made only of abstract UI blocks and colored shapes, no readable text';
+    if(/API|개발|코드|프로그래밍/.test(s)) return 'PRIMARY VISUAL ANCHOR: one laptop showing a generic code editor made only of abstract colored code lines, no readable text';
+    if(/영상|동영상|편집/.test(s)) return 'PRIMARY VISUAL ANCHOR: one desktop monitor showing a generic video-editing timeline made only of abstract blocks, no readable text';
+    return 'PRIMARY VISUAL ANCHOR: one modern computer or digital device directly related to the article section';
   }
 
-  // 이미지마다 역할을 달리해 같은 장면이 반복되는 것을 줄입니다.
+  // 이미지마다 서로 다른 촬영 역할을 부여합니다.
   function imageRole(index,site){
-    if(site==='calc') return ['핵심 계산 도구','계산에 필요한 핵심 자료','본문의 계산 대상','계산 결과를 확인하는 도구','대표 장면'][index%5];
-    if(site==='mingka') return ['핵심 자동차 요소','계약 또는 이용 조건','차량 관련 핵심 요소','비용 또는 조건','대표 장면'][index%5];
-    return ['핵심 AI 도구','사용 과정의 핵심 기기','비교 대상의 핵심 기능','작업 결과','대표 장면'][index%5];
+    if(site==='mingka') return ['대표 차량 장면','차량 실내 장면','실제 이용 환경','차량 세부 장면','대표 차량 장면'][index%5];
+    if(site==='calc') return ['핵심 계산 도구','계산 자료 장면','계산 대상 장면','금액 확인 장면','대표 계산 장면'][index%5];
+    return ['핵심 AI 도구','사용 환경 장면','기능을 보여주는 장면','작업 결과 장면','대표 서비스 장면'][index%5];
   }
 
-  // 이미지 영역을 만듭니다.
+  // 이미지 갤러리를 만듭니다.
   function createGallery(){
     let box=document.getElementById('aiImageGallery');
     if(box) return box;
@@ -83,7 +110,7 @@
     return box;
   }
 
-  // 글의 이미지 자리마다 이미지를 순서대로 생성합니다.
+  // 글의 이미지 자리마다 본문과 연결된 장면을 생성합니다.
   async function makeImages(body){
     if(running) return;
     const original=extractPrompts(body);
@@ -102,9 +129,11 @@
         const item=original[i];
         status.textContent=`이미지 ${i+1}/${original.length} 생성 준비 중...`;
         const role=imageRole(i,site);
-        const anchor=visualAnchor(site,`${topic}\n${item.heading}\n${item.prompt}\n${item.context}`);
+        const anchor=visualAnchor(site,`${topic}\n${item.heading}\n${item.prompt}\n${item.context}`,i);
         const reviewed=await reviewImagePrompt(topic,site,item.prompt,`${role}\n${anchor}\n${item.context}`,item.heading);
-        const finalPrompt=`${anchor}. ARTICLE TOPIC: ${topic}. ARTICLE SECTION: ${item.heading||role}. IMAGE PURPOSE: ${role}. ${reviewed}. The primary visual anchor must occupy most of the frame. Show exactly one clear realistic scene and no more than two closely related objects. Do not add unrelated people, vehicles, charts, screens, documents or decorative objects. Use a realistic Korean editorial photograph, natural daylight, crisp focus, clean composition. No collage, split screen, fantasy, illustration, anime or painting. No people, faces, hands or bodies. No readable text, letters, numbers, logos, brand names, signs or watermark.`;
+
+        // 생성 모델이 문서·글자를 과하게 만들지 않도록 최종 안전 규칙을 강하게 적용합니다.
+        const finalPrompt=`${anchor}. ARTICLE TOPIC: ${topic}. ARTICLE SECTION: ${item.heading||role}. IMAGE PURPOSE: ${role}. ${reviewed}. Create ONE coherent realistic photograph, not an illustration. The main subject must fill most of the frame and be immediately recognizable. Prefer a real physical object, vehicle, interior or environment over paperwork. Do not create a generic office desk scene unless the article section is specifically about an office. Do not create documents, forms, receipts, contracts or papers unless they are essential to the exact section. If paper is necessary, it must be completely blank and contain zero writing. No readable text, letters, numbers, Korean characters, Chinese characters, Japanese characters, logos, brand names, signs or watermarks. Never invent text. Do not repeat the same composition as other images. No collage, split screen, infographic, diagram, poster, screenshot, fantasy, anime, cartoon, painting or 3D render. No people, faces, hands or bodies. Natural daylight, realistic Korean editorial photography, crisp focus, professional composition, subtle background blur, 4:5 vertical composition.`;
 
         const card=document.createElement('div');
         card.className='image-card';
@@ -147,6 +176,7 @@
     }
   }
 
+  // HTML에 넣을 텍스트의 특수문자를 안전하게 처리합니다.
   function escapeHtml(value){
     return String(value||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   }
@@ -169,7 +199,7 @@
       .status{font-size:13px!important;line-height:1.45;background:#f7f6fb!important}.result{margin-top:24px!important;padding-top:18px;border-top:1px solid #eee}.result:before{content:'생성 결과';display:block;font-size:19px;font-weight:900;margin-bottom:4px}
       #title{font-weight:800;font-size:16px}#tags{color:#6259a9}
       .private-tools{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 4px}.private-tools button{background:#fff;font-weight:800;cursor:pointer;min-height:44px}.private-tools .primary-tool{background:#7567e8;color:#fff;border-color:#7567e8}
-      .private-save{font-size:12px;color:#777;margin:7px 2px}.image-card{margin:12px 0 20px;padding:12px;border:1px solid #eee;border-radius:14px;background:#fff}.image-source{font-size:12px;color:#777;margin:6px 0 10px;line-height:1.5}.image-card img{display:block;width:100%;border-radius:10px}.image-loading,.image-failed{padding:30px;text-align:center;background:#fafafa;border-radius:10px;color:#777}.image-retry{margin-top:8px;width:100%;padding:10px;cursor:pointer;background:#fff}
+      .private-save{font-size:12px;color:#777;margin:7px 2px}.image-card{margin:12px 0 20px;padding:12px;border:1px solid #eee;border-radius:14px;background:#fff}.image-source{font-size:12px;color:#777;margin:6px 0 10px;line-height:1.5}.image-card img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:10px}.image-loading,.image-failed{padding:30px;text-align:center;background:#fafafa;border-radius:10px;color:#777}.image-retry{margin-top:8px;width:100%;padding:10px;cursor:pointer;background:#fff}
       @media(max-width:700px){body{padding:8px!important}main{padding:16px!important;border-radius:18px!important}.tabs{position:sticky;top:0;z-index:20;background:#fff;padding:6px 0;border-radius:0 0 12px 12px}.tab{font-size:14px!important}.private-tools{grid-template-columns:1fr 1fr}textarea{min-height:360px!important}}
     `;
     document.head.appendChild(style);
@@ -201,6 +231,7 @@
     setTimeout(restoreDraft,200);
   }
 
+  // 제목, 본문, 태그를 각각 클립보드로 복사합니다.
   async function copyField(id,button){
     const el=document.getElementById(id);if(!el)return;
     const value=el.value||'';
@@ -208,6 +239,7 @@
     const old=button.textContent;button.textContent='✓ 복사됨';setTimeout(()=>button.textContent=old,1000);
   }
 
+  // 현재 결과를 브라우저에 임시 저장합니다.
   function saveDraft(){
     const data={title:document.getElementById('title')?.value||'',body:document.getElementById('body')?.value||'',tags:document.getElementById('tags')?.value||'',savedAt:new Date().toISOString()};
     if(!data.title&&!data.body)return;
@@ -215,6 +247,7 @@
     const note=document.getElementById('privateSaveNote');if(note)note.textContent='✓ 초안을 이 브라우저에 저장했습니다.';
   }
 
+  // 새로고침하면 마지막 초안을 복구합니다.
   function restoreDraft(){
     try{
       const d=JSON.parse(localStorage.getItem('flik_private_blog_draft_v1')||'null');if(!d)return;
