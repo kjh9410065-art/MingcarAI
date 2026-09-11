@@ -112,13 +112,15 @@ export default {
       }
     }
 
-    // 최신 enhance.js를 페이지에 주입합니다.
+    // 최신 enhance.js를 항상 페이지에 주입합니다.
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       const response = await env.ASSETS.fetch(request);
       const html = await response.text();
+      // 기존 enhance.js가 HTML에 들어 있어도 새 버전으로 교체해 캐시 때문에 패치가 안 보이는 문제를 막습니다.
+      const scriptTag = '<script src="/enhance.js?v=12"></script>';
       const injected = html.includes('enhance.js')
-        ? html
-        : html.replace('</body>', '<script src="/enhance.js?v=11"></script></body>');
+        ? html.replace(/<script[^>]+src=["'][^"']*enhance\.js[^"']*["'][^>]*><\/script>/gi, scriptTag)
+        : html.replace('</body>', `${scriptTag}</body>`);
       return new Response(injected, {
         status: response.status,
         headers: new Headers(response.headers)
