@@ -52,6 +52,46 @@
     return box;
   }
 
+  // 개인용 도구에 광고 코드를 나중에 쉽게 삽입할 수 있도록 빈 광고 슬롯을 미리 만듭니다.
+  function installAdSlots(){
+    if(document.getElementById('blogAdTop')) return;
+    const style=document.createElement('style');
+    style.id='blogAdStyles';
+    style.textContent=`
+      .blog-ad-slot{width:100%;box-sizing:border-box;min-height:90px;margin:16px 0;padding:10px;border:1px dashed #d9d6e2;border-radius:12px;background:#faf9fd;display:flex;align-items:center;justify-content:center;overflow:hidden}
+      .blog-ad-slot::before{content:'광고 영역';font-size:11px;color:#aaa;letter-spacing:.04em}
+      .blog-ad-slot:empty::before{display:block}
+      .blog-ad-slot:not(:empty)::before{display:none}
+      .blog-ad-top{margin-top:10px}.blog-ad-result{min-height:250px}.blog-ad-bottom{min-height:100px}
+      @media(max-width:700px){.blog-ad-slot{min-height:70px;margin:12px 0}.blog-ad-result{min-height:180px}}
+    `;
+    document.head.appendChild(style);
+
+    // 상단: 사이트 선택 영역 아래에 광고를 넣을 자리입니다.
+    const top=document.createElement('div');
+    top.id='blogAdTop';
+    top.className='blog-ad-slot blog-ad-top';
+    top.dataset.adPosition='top';
+    const tabs=document.querySelector('.tabs');
+    if(tabs) tabs.insertAdjacentElement('afterend',top);
+
+    // 중간: 생성 버튼과 결과 영역 사이에 광고를 넣을 자리입니다.
+    const middle=document.createElement('div');
+    middle.id='blogAdMiddle';
+    middle.className='blog-ad-slot blog-ad-middle';
+    middle.dataset.adPosition='middle';
+    const status=document.getElementById('status');
+    if(status) status.insertAdjacentElement('afterend',middle);
+
+    // 하단: 생성 결과 아래에 광고를 넣을 자리입니다.
+    const bottom=document.createElement('div');
+    bottom.id='blogAdBottom';
+    bottom.className='blog-ad-slot blog-ad-bottom';
+    bottom.dataset.adPosition='bottom';
+    const main=document.querySelector('main');
+    if(main) main.appendChild(bottom);
+  }
+
   // 이미지마다 고정 소재를 넣지 않고, 각각의 원본 설명을 독립적으로 처리합니다.
   async function makeImages(body){
     if(running) return;
@@ -161,6 +201,9 @@ The original image description is the source of truth. Do not replace its main s
       @media(max-width:700px){body{padding:8px!important}main{padding:16px!important;border-radius:18px!important}.tabs{position:sticky;top:0;z-index:20;background:#fff;padding:6px 0;border-radius:0 0 12px 12px}.tab{font-size:14px!important}.private-tools{grid-template-columns:1fr 1fr}textarea{min-height:360px!important}}
     `;
     document.head.appendChild(style);
+
+    // 광고 슬롯은 실제 광고 코드 없이 빈 자리만 만들어 둡니다.
+    installAdSlots();
 
     // 개인 작업용 복사/저장 버튼을 결과 영역에 추가합니다.
     const result=document.querySelector('.result');
